@@ -1,0 +1,1982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Virtual Lab — Memory Technology Comparison</title>
+
+<!-- Sora (geometric display) + IBM Plex Mono (data) -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* Background */
+  --bg-root:   #0b0b0d;
+  --bg-deep:   #0e0e12;
+  --bg-raised: #121218;
+  --bg-float:  #161620;
+
+  /* Glass surface tiers */
+  --glass-1: rgba(255,255,255,0.042);
+  --glass-2: rgba(255,255,255,0.065);
+  --glass-3: rgba(255,255,255,0.085);
+
+  /* Glass borders */
+  --gb-soft:  rgba(255,255,255,0.07);
+  --gb-mid:   rgba(255,255,255,0.11);
+  --gb-focus: rgba(255,255,255,0.18);
+
+  /* Accent palette — periwinkle blue, single family */
+  --accent:        #818cf8;
+  --accent-light:  #a5b4fc;
+  --accent-bright: #c7d2fe;
+  --accent-dim:    rgba(129,140,248,0.14);
+  --accent-glow:   rgba(129,140,248,0.22);
+  --accent-deep:   rgba(129,140,248,0.07);
+
+  /* Cyan tint — secondary highlight only */
+  --cyan:     #67e8f9;
+  --cyan-dim: rgba(103,232,249,0.12);
+
+  /* Amber — single use for cost metric */
+  --amber:     #fcd34d;
+  --amber-dim: rgba(252,211,77,0.10);
+
+  /* Emerald — single use for best/green */
+  --emerald:     #6ee7b7;
+  --emerald-dim: rgba(110,231,183,0.10);
+
+  /* Rose — warning */
+  --rose:     #fda4af;
+  --rose-dim: rgba(253,164,175,0.10);
+
+  /* Text */
+  --t1: rgba(255,255,255,0.90);
+  --t2: rgba(255,255,255,0.52);
+  --t3: rgba(255,255,255,0.28);
+  --t4: rgba(255,255,255,0.14);
+
+  /* Typography */
+  --sans: 'Sora', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'Fira Code', monospace;
+
+  /* Radius */
+  --r14: 14px;
+  --r16: 16px;
+  --r18: 18px;
+  --r20: 20px;
+  --r24: 24px;
+
+  /* Motion */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease:   cubic-bezier(0.16, 1, 0.3, 1);
+  --linear: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; }
+body {
+  background: var(--bg-root);
+  color: var(--t1);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   AMBIENT BACKGROUND — two soft orbs that slowly breathe
+═══════════════════════════════════════════════════════════════════ */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  animation: orbBreath 14s ease-in-out infinite alternate;
+}
+.bg-orb-1 {
+  width: 55vw; height: 55vw;
+  top: -20vw; left: -15vw;
+  background: radial-gradient(circle, rgba(99,102,241,0.09) 0%, transparent 65%);
+  animation-delay: 0s;
+}
+.bg-orb-2 {
+  width: 45vw; height: 45vw;
+  bottom: -18vw; right: -12vw;
+  background: radial-gradient(circle, rgba(103,232,249,0.06) 0%, transparent 65%);
+  animation-delay: -6s;
+}
+@keyframes orbBreath {
+  from { transform: scale(1) translateY(0); opacity: 0.85; }
+  to   { transform: scale(1.12) translateY(-20px); opacity: 1; }
+}
+
+/* Neural canvas — extremely subtle */
+#neural {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIQUID GLASS — the signature effect
+═══════════════════════════════════════════════════════════════════ */
+.glass {
+  background: var(--glass-1);
+  backdrop-filter: blur(22px) saturate(170%) brightness(1.04);
+  -webkit-backdrop-filter: blur(22px) saturate(170%) brightness(1.04);
+  border-radius: var(--r18);
+  border: 1px solid var(--gb-soft);
+  position: relative;
+  overflow: hidden;
+  /* Soft depth shadow */
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.28),
+    0 8px 24px rgba(0,0,0,0.22),
+    0 0 0 0.5px rgba(255,255,255,0.04) inset;
+  transition:
+    transform 0.32s var(--ease),
+    box-shadow 0.32s var(--ease),
+    border-color 0.32s var(--ease);
+}
+
+/* Liquid reflection sweep — the moving shine */
+.glass::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    135deg,
+    transparent         0%,
+    transparent         35%,
+    rgba(255,255,255,0.028) 43%,
+    rgba(255,255,255,0.055) 50%,
+    rgba(255,255,255,0.028) 57%,
+    transparent         65%,
+    transparent         100%
+  );
+  background-size: 300% 300%;
+  animation: liquidShine 9s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+  border-radius: inherit;
+}
+
+@keyframes liquidShine {
+  0%   { background-position: 0% 0%; }
+  50%  { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+/* Gradient top edge — the glass rim light */
+.glass::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255,255,255,0.14) 30%,
+    rgba(255,255,255,0.22) 50%,
+    rgba(255,255,255,0.14) 70%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Hover state */
+.glass:hover {
+  transform: translateY(-3px) scale(1.008);
+  border-color: var(--gb-mid);
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.32),
+    0 16px 48px rgba(0,0,0,0.28),
+    0 0 32px rgba(129,140,248,0.06),
+    0 0 0 0.5px rgba(255,255,255,0.07) inset;
+}
+
+/* Tier variants */
+.glass-2 { background: var(--glass-2); }
+.glass-3 { background: var(--glass-3); border-color: var(--gb-mid); }
+
+/* Accent-glowing glass */
+.glass-accent {
+  border-color: rgba(129,140,248,0.22);
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.28),
+    0 8px 24px rgba(0,0,0,0.22),
+    0 0 40px rgba(129,140,248,0.07),
+    0 0 0 0.5px rgba(129,140,248,0.08) inset;
+}
+
+/* Padding utilities */
+.gp { padding: 28px; }
+.gp-sm { padding: 20px 24px; }
+.gp-lg { padding: 36px 32px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LOADING OVERLAY
+═══════════════════════════════════════════════════════════════════ */
+#loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(11,11,13,0.80);
+  backdrop-filter: blur(28px);
+}
+#loader.on { display: flex; }
+
+.ld-visual {
+  position: relative;
+  width: 52px; height: 52px;
+}
+.ld-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  animation: spin 1s linear infinite;
+}
+.ld-ring-1 { border-top-color: var(--accent); border-right-color: rgba(129,140,248,0.25); }
+.ld-ring-2 { inset: 10px; border-bottom-color: var(--cyan); border-left-color: rgba(103,232,249,0.2); animation-duration: 0.75s; animation-direction: reverse; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ld-dot {
+  position: absolute;
+  inset: 21px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 14px var(--accent-glow);
+  animation: dotPulse 1s ease-in-out infinite alternate;
+}
+@keyframes dotPulse { from { opacity: 0.5; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
+
+.ld-title {
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--t1);
+  letter-spacing: 0.01em;
+}
+.ld-sub {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--t3);
+  letter-spacing: 0.06em;
+  text-align: center;
+  max-width: 260px;
+  line-height: 1.5;
+}
+.ld-track {
+  width: 200px; height: 2px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ld-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--cyan));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s var(--ease);
+  box-shadow: 0 0 10px rgba(129,140,248,0.5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PAGE SHELL
+═══════════════════════════════════════════════════════════════════ */
+#page {
+  position: relative;
+  z-index: 2;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 28px 120px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION RHYTHM
+═══════════════════════════════════════════════════════════════════ */
+section { margin-bottom: 64px; }
+
+.sec-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 12px;
+}
+.sec-eyebrow::before {
+  content: '';
+  width: 18px; height: 1px;
+  background: currentColor;
+  display: inline-block;
+  opacity: 0.7;
+}
+.sec-eyebrow-dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  flex-shrink: 0;
+  animation: dotPulse 2.5s ease-in-out infinite alternate;
+}
+.sec-h {
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
+  font-weight: 600;
+  color: var(--t1);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+.sec-h span {
+  background: linear-gradient(120deg, var(--accent-light), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.sec-p {
+  font-size: 0.88rem;
+  font-weight: 300;
+  color: var(--t2);
+  line-height: 1.7;
+  max-width: 600px;
+  margin-bottom: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════════════════════════ */
+#hdr {
+  padding: 80px 0 60px;
+  text-align: center;
+  /* stagger entry */
+}
+.hdr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 100px;
+  background: var(--glass-1);
+  border: 1px solid var(--gb-soft);
+  backdrop-filter: blur(12px);
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 24px;
+  animation: fadeUp 0.8s var(--ease) both;
+}
+.hdr-badge-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 7px var(--accent);
+  animation: dotPulse 2s ease-in-out infinite alternate;
+}
+
+.hdr-title {
+  font-size: clamp(2.2rem, 6vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: var(--t1);
+  margin-bottom: 8px;
+  animation: fadeUp 0.8s var(--ease) 0.08s both;
+}
+.hdr-title em {
+  font-style: normal;
+  background: linear-gradient(125deg, var(--accent-light) 0%, var(--cyan) 50%, var(--accent-bright) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hdr-subtitle {
+  font-size: clamp(0.85rem, 2vw, 1rem);
+  font-weight: 300;
+  color: var(--t2);
+  letter-spacing: 0.02em;
+  margin-bottom: 36px;
+  animation: fadeUp 0.8s var(--ease) 0.14s both;
+}
+
+/* Live status bar */
+.hdr-status {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  animation: fadeUp 0.8s var(--ease) 0.2s both;
+}
+.hs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 100px;
+  background: var(--glass-1);
+  border: 1px solid var(--gb-soft);
+  backdrop-filter: blur(12px);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--t3);
+  letter-spacing: 0.05em;
+}
+.hs-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.hd-g { background: var(--emerald); box-shadow: 0 0 6px rgba(110,231,183,0.6); animation: dotPulse 2s ease-in-out infinite alternate; }
+.hd-b { background: var(--accent);  box-shadow: 0 0 6px var(--accent-glow); animation: dotPulse 2s ease-in-out 0.5s infinite alternate; }
+.hd-c { background: var(--cyan);    box-shadow: 0 0 6px rgba(103,232,249,0.6); animation: dotPulse 2s ease-in-out 1s infinite alternate; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Horizontal rule with glow */
+.rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(129,140,248,0.18) 30%, rgba(103,232,249,0.12) 70%, transparent);
+  border: none;
+  margin: 0 0 64px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   KPI STRIP
+═══════════════════════════════════════════════════════════════════ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.kpi {
+  padding: 22px 20px;
+  cursor: default;
+}
+.kpi-label {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 12px;
+}
+.kpi-value {
+  font-family: var(--mono);
+  font-size: 2.1rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--t1);
+  transition: color 0.3s;
+}
+.kpi-unit {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--t3);
+  margin-top: 7px;
+  letter-spacing: 0.04em;
+}
+.kpi-pill {
+  position: absolute;
+  top: 14px; right: 14px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+}
+.kpi { position: relative; overflow: hidden; }
+.kp-accent { background: var(--accent-dim); color: var(--accent-light); }
+.kp-emerald { background: var(--emerald-dim); color: var(--emerald); }
+.kp-amber   { background: var(--amber-dim);   color: var(--amber); }
+.kp-cyan    { background: var(--cyan-dim);     color: var(--cyan); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONTROL PANEL
+═══════════════════════════════════════════════════════════════════ */
+.chip-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px,1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.mem-chip {
+  padding: 18px 16px 16px;
+  border-radius: var(--r14);
+  background: rgba(255,255,255,0.032);
+  border: 1px solid var(--gb-soft);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.28s var(--ease);
+  user-select: none;
+  backdrop-filter: blur(14px);
+}
+/* Liquid shine on each chip too */
+.mem-chip::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  transition: left 0.5s var(--ease);
+  pointer-events: none;
+}
+.mem-chip:hover::before { left: 140%; }
+.mem-chip:hover {
+  border-color: rgba(129,140,248,0.25);
+  background: rgba(129,140,248,0.07);
+  transform: translateY(-2px);
+}
+.mem-chip.on {
+  border-color: rgba(129,140,248,0.35);
+  background: rgba(129,140,248,0.09);
+  box-shadow: 0 0 24px rgba(129,140,248,0.1), inset 0 0 20px rgba(129,140,248,0.04);
+}
+.mc-tick {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gb-mid);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.5rem;
+  color: transparent;
+  transition: all 0.2s var(--ease);
+}
+.mem-chip.on .mc-tick {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.mc-name { font-size: 0.92rem; font-weight: 600; color: var(--t1); margin-top: 2px; }
+.mc-sub  { font-family: var(--mono); font-size: 0.62rem; color: var(--t3); margin-top: 3px; letter-spacing: 0.03em; }
+.mc-tag  {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 2px 9px;
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+.mt-a { background: var(--accent-dim);  color: var(--accent-light); border: 1px solid rgba(129,140,248,0.18); }
+.mt-c { background: var(--cyan-dim);    color: var(--cyan);          border: 1px solid rgba(103,232,249,0.18); }
+.mt-e { background: var(--emerald-dim); color: var(--emerald);        border: 1px solid rgba(110,231,183,0.18); }
+
+/* Bench tracks */
+.bench-tracks {
+  display: none;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  background: rgba(0,0,0,0.15);
+  border-radius: var(--r14);
+  border: 1px solid var(--gb-soft);
+}
+.bt-row { display: flex; flex-direction: column; gap: 5px; }
+.bt-lbl {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 0.65rem;
+  color: var(--t2); letter-spacing: 0.04em;
+}
+.bt-track {
+  height: 2.5px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bt-fill {
+  height: 100%;
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.22s var(--ease);
+  position: relative;
+}
+/* Shimmer on fill */
+.bt-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 16px; height: 100%;
+  background: rgba(255,255,255,0.5);
+  filter: blur(3px);
+  border-radius: 3px;
+}
+.bfa { background: linear-gradient(90deg, var(--accent-dim), var(--accent)); box-shadow: 0 0 8px rgba(129,140,248,0.35); }
+.bfc { background: linear-gradient(90deg, var(--cyan-dim),    var(--cyan));   box-shadow: 0 0 8px rgba(103,232,249,0.35); }
+.bfe { background: linear-gradient(90deg, var(--emerald-dim), var(--emerald));box-shadow: 0 0 8px rgba(110,231,183,0.35); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════════════════════════ */
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 26px;
+  border-radius: 100px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: all 0.28s var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  transition: left 0.45s var(--ease);
+}
+.btn:hover::before { left: 140%; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #6366f1);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(129,140,248,0.35), 0 4px 20px rgba(99,102,241,0.28);
+}
+.btn-primary:hover {
+  box-shadow: 0 0 0 1px rgba(129,140,248,0.5), 0 8px 32px rgba(99,102,241,0.4);
+  transform: translateY(-2px) scale(1.02);
+}
+.btn-primary:active { transform: translateY(0) scale(0.99); }
+
+.btn-ghost {
+  background: var(--glass-1);
+  color: var(--t2);
+  border: 1px solid var(--gb-soft);
+  backdrop-filter: blur(12px);
+}
+.btn-ghost:hover {
+  background: var(--glass-2);
+  color: var(--t1);
+  border-color: var(--gb-mid);
+  transform: translateY(-1px);
+}
+
+.btn-export {
+  background: var(--glass-1);
+  color: var(--amber);
+  border: 1px solid rgba(252,211,77,0.16);
+  backdrop-filter: blur(12px);
+  font-size: 0.82rem;
+}
+.btn-export:hover {
+  background: rgba(252,211,77,0.07);
+  border-color: rgba(252,211,77,0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(252,211,77,0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESULTS TABLE
+═══════════════════════════════════════════════════════════════════ */
+#resultsWrap {
+  display: none;
+  animation: fadeUp 0.5s var(--ease) both;
+}
+#resultsWrap.show { display: block; }
+
+.tbl-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+thead { border-bottom: 1px solid var(--gb-soft); }
+th {
+  padding: 12px 16px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--t3);
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+td {
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.035);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--t2);
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background 0.15s; }
+tbody tr:hover td { background: rgba(255,255,255,0.016); color: var(--t1); }
+.cb { color: var(--emerald) !important; }
+.cg { color: var(--accent-light) !important; }
+.cm { color: var(--amber) !important; }
+.cr { color: var(--rose) !important; }
+.ctag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 0.66rem;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ROM SECTION
+═══════════════════════════════════════════════════════════════════ */
+.rom-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
+
+.rom-icon {
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  backdrop-filter: blur(8px);
+}
+.ri-v { background: var(--accent-dim); border: 1px solid rgba(129,140,248,0.18); }
+.ri-c { background: var(--cyan-dim);   border: 1px solid rgba(103,232,249,0.18); }
+
+.rom-hd { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+.rom-name { font-size: 1rem; font-weight: 600; color: var(--t1); margin-bottom: 3px; }
+.rom-desc { font-size: 0.78rem; color: var(--t2); line-height: 1.55; max-width: 260px; }
+
+.spec-bar-row { margin-bottom: 13px; }
+.spec-bar-hd {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 0.65rem;
+  color: var(--t3); margin-bottom: 6px; letter-spacing: 0.03em;
+}
+.spec-bar-hd span:last-child { color: var(--t2); }
+.bar-track {
+  height: 2.5px;
+  background: rgba(255,255,255,0.045);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1.1s var(--ease);
+}
+.bf-v { background: linear-gradient(90deg, rgba(129,140,248,0.4), var(--accent)); }
+.bf-c { background: linear-gradient(90deg, rgba(103,232,249,0.4), var(--cyan)); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CHARTS
+═══════════════════════════════════════════════════════════════════ */
+.chart-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
+.chart-wrap { padding: 24px; }
+.chart-title {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--t2);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.chart-title::before {
+  content: '';
+  width: 2.5px; height: 15px;
+  background: linear-gradient(180deg, var(--accent), var(--cyan));
+  border-radius: 2px;
+  display: inline-block;
+}
+.chart-wrap canvas { max-height: 270px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   TEMPERATURE SECTION
+═══════════════════════════════════════════════════════════════════ */
+.temp-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.temp-big {
+  font-family: var(--mono);
+  font-size: 3.5rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: var(--t1);
+  transition: color 0.4s;
+}
+.temp-unit { font-size: 1.8rem; color: var(--t2); }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  background: rgba(255,255,255,0.06);
+  margin-bottom: 8px;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--cyan) 50%, var(--rose) 100%);
+  opacity: 0.45;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--bg-root);
+  border: 2px solid var(--accent);
+  margin-top: -8.5px;
+  cursor: pointer;
+  box-shadow: 0 0 14px var(--accent-glow), 0 2px 8px rgba(0,0,0,0.5);
+  transition: all 0.2s var(--spring);
+}
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.22);
+  box-shadow: 0 0 24px var(--accent-glow), 0 2px 8px rgba(0,0,0,0.5);
+}
+.temp-ticks {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 0.6rem;
+  color: var(--t3); letter-spacing: 0.04em;
+}
+.temp-alert {
+  display: none;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--r14);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.perf-live {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px,1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.plv-card {
+  padding: 18px;
+  background: rgba(0,0,0,0.18);
+  border-radius: var(--r14);
+  border: 1px solid var(--gb-soft);
+  transition: all 0.25s var(--ease);
+}
+.plv-card:hover { background: rgba(0,0,0,0.25); border-color: var(--gb-mid); }
+.plv-name { font-size: 0.76rem; font-weight: 500; color: var(--t2); margin-bottom: 9px; }
+.plv-pct  {
+  font-family: var(--mono);
+  font-size: 1.8rem;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 10px;
+  transition: color 0.3s;
+}
+.plv-track { height: 2px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; }
+.plv-fill  { height: 100%; border-radius: 2px; transition: width 0.65s var(--ease); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   INSIGHTS
+═══════════════════════════════════════════════════════════════════ */
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.ins {
+  padding: 22px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.28s var(--ease);
+}
+.ins:hover { transform: translateY(-3px); }
+/* Left accent stripe */
+.ins::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 14px; bottom: 14px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.7;
+}
+.ins.i-emerald::before { background: var(--emerald); }
+.ins.i-amber::before   { background: var(--amber); }
+.ins.i-cyan::before    { background: var(--cyan); }
+
+.ins-icon { font-size: 1.3rem; margin-bottom: 10px; }
+.ins-cat  {
+  font-family: var(--mono);
+  font-size: 0.59rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 5px;
+}
+.ins-name { font-size: 0.95rem; font-weight: 600; color: var(--t1); margin-bottom: 6px; letter-spacing: -0.01em; }
+.ins-text { font-size: 0.76rem; color: var(--t2); line-height: 1.55; }
+
+/* Report */
+#reportArea {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--gb-soft);
+  border-radius: var(--r14);
+  padding: 26px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.85;
+  color: var(--t2);
+  white-space: pre-wrap;
+  min-height: 100px;
+  max-height: 460px;
+  overflow-y: auto;
+  letter-spacing: 0.02em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TOOLTIPS
+═══════════════════════════════════════════════════════════════════ */
+[data-tip] { position: relative; cursor: default; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%; transform: translateX(-50%);
+  background: var(--bg-float);
+  border: 1px solid var(--gb-mid);
+  color: var(--t1);
+  font-family: var(--sans);
+  font-size: 0.73rem;
+  padding: 7px 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 99;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  max-width: 220px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.5;
+}
+[data-tip]:hover::after { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   GRID HELPERS
+═══════════════════════════════════════════════════════════════════ */
+.g2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
+.g3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; }
+.g4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px,1fr)); gap: 12px; }
+.mb12 { margin-bottom: 12px; }
+.mb20 { margin-bottom: 20px; }
+.mb28 { margin-bottom: 28px; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PAGE SCROLL ANIMATIONS — triggered via JS IntersectionObserver
+═══════════════════════════════════════════════════════════════════ */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
+}
+.reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Staggered children */
+.stagger > * { opacity: 0; transform: translateY(14px); transition: opacity 0.5s var(--ease), transform 0.5s var(--ease); }
+.stagger.in > *:nth-child(1) { opacity:1; transform:translateY(0); transition-delay: 0s; }
+.stagger.in > *:nth-child(2) { opacity:1; transform:translateY(0); transition-delay: 0.07s; }
+.stagger.in > *:nth-child(3) { opacity:1; transform:translateY(0); transition-delay: 0.14s; }
+.stagger.in > *:nth-child(4) { opacity:1; transform:translateY(0); transition-delay: 0.21s; }
+.stagger.in > *:nth-child(5) { opacity:1; transform:translateY(0); transition-delay: 0.28s; }
+.stagger.in > *:nth-child(6) { opacity:1; transform:translateY(0); transition-delay: 0.35s; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(129,140,248,0.2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(129,140,248,0.35); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  #page { padding: 0 16px 80px; }
+  .hdr-title { font-size: 2rem; }
+  .temp-big { font-size: 2.4rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- AMBIENT BACKGROUND ORBS -->
+<div class="bg-canvas">
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+</div>
+
+<!-- NEURAL CANVAS -->
+<canvas id="neural"></canvas>
+
+<!-- LOADING OVERLAY -->
+<div id="loader">
+  <div class="ld-visual">
+    <div class="ld-ring ld-ring-1"></div>
+    <div class="ld-ring ld-ring-2"></div>
+    <div class="ld-dot"></div>
+  </div>
+  <div class="ld-title">Running Simulation</div>
+  <div class="ld-sub" id="ldMsg">Initialising memory controllers…</div>
+  <div class="ld-track"><div class="ld-fill" id="ldFill"></div></div>
+</div>
+
+<!-- ════════════════════════ PAGE ════════════════════════ -->
+<div id="page">
+
+  <!-- ── HEADER ── -->
+  <header id="hdr">
+    <div class="hdr-badge"><span class="hdr-badge-dot"></span>Assignment 10 · Virtual Laboratory · 2025</div>
+    <h1 class="hdr-title">AI Virtual Lab<br><em>Memory Technology</em></h1>
+    <p class="hdr-subtitle">RAM &amp; ROM Comparative Analysis — DDR4 · DDR5 · LPDDR5 · EEPROM · Flash</p>
+    <div class="hdr-status">
+      <span class="hs-pill"><span class="hs-dot hd-g"></span>Simulation engine ready</span>
+      <span class="hs-pill"><span class="hs-dot hd-b"></span>5 modules indexed</span>
+      <span class="hs-pill"><span class="hs-dot hd-c"></span>Chart.js loaded</span>
+      <span class="hs-pill"><span class="hs-dot hd-g"></span>Thermal model active</span>
+    </div>
+  </header>
+
+  <hr class="rule"/>
+
+  <!-- ── 1. KPI STRIP ── -->
+  <section class="reveal">
+    <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>Performance Overview</div>
+    <h2 class="sec-h">Key Performance <span>Indicators</span></h2>
+    <p class="sec-p">Live summary of best-in-class values across all tested memory modules. Run the simulation to populate.</p>
+    <div class="kpi-grid stagger mb28">
+      <div class="glass gp kpi">
+        <span class="kpi-pill kp-accent">Fastest</span>
+        <div class="kpi-label" data-tip="Lowest random-read latency in nanoseconds">Access Time</div>
+        <div class="kpi-value" id="kpi-a" style="color:var(--accent-light)">—</div>
+        <div class="kpi-unit">nanoseconds (ns)</div>
+      </div>
+      <div class="glass gp kpi">
+        <span class="kpi-pill kp-emerald">Lowest</span>
+        <div class="kpi-label" data-tip="Minimum active power consumption">Power Draw</div>
+        <div class="kpi-value" id="kpi-p" style="color:var(--emerald)">—</div>
+        <div class="kpi-unit">Watts (W)</div>
+      </div>
+      <div class="glass gp kpi">
+        <span class="kpi-pill kp-amber">Cheapest</span>
+        <div class="kpi-label" data-tip="Most economical price per gigabyte">Cost / GB</div>
+        <div class="kpi-value" id="kpi-c" style="color:var(--amber)">—</div>
+        <div class="kpi-unit">USD per GB</div>
+      </div>
+      <div class="glass gp kpi">
+        <span class="kpi-pill kp-cyan">Highest</span>
+        <div class="kpi-label" data-tip="Mean Time Between Failures (MTBF)">Reliability</div>
+        <div class="kpi-value" id="kpi-m" style="color:var(--cyan)">—</div>
+        <div class="kpi-unit">MTBF × 1000 hrs</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 2. CONTROL PANEL ── -->
+  <section class="reveal">
+    <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>Benchmark Control</div>
+    <h2 class="sec-h">Simulation <span>Configuration</span></h2>
+    <p class="sec-p">Select the memory modules to benchmark, then initiate the AI simulation sweep.</p>
+    <div class="glass glass-accent gp">
+      <div class="chip-row">
+        <div class="mem-chip on" id="chip-ddr4" onclick="toggleChip('ddr4',this)">
+          <span class="mc-tick">✓</span>
+          <div class="mc-name">DDR4</div>
+          <div class="mc-sub">Gen 4 SDRAM</div>
+          <span class="mc-tag mt-a">3200 MT/s</span>
+        </div>
+        <div class="mem-chip on" id="chip-ddr5" onclick="toggleChip('ddr5',this)">
+          <span class="mc-tick">✓</span>
+          <div class="mc-name">DDR5</div>
+          <div class="mc-sub">Gen 5 SDRAM</div>
+          <span class="mc-tag mt-c">6400 MT/s</span>
+        </div>
+        <div class="mem-chip on" id="chip-lpddr5" onclick="toggleChip('lpddr5',this)">
+          <span class="mc-tick">✓</span>
+          <div class="mc-name">LPDDR5</div>
+          <div class="mc-sub">Low-Power Gen 5</div>
+          <span class="mc-tag mt-e">6400 MT/s</span>
+        </div>
+      </div>
+
+      <div class="bench-tracks" id="benchTracks">
+        <div class="bt-row">
+          <div class="bt-lbl"><span>DDR4-3200</span><span id="pct-ddr4">0%</span></div>
+          <div class="bt-track"><div class="bt-fill bfa" id="bar-ddr4"></div></div>
+        </div>
+        <div class="bt-row">
+          <div class="bt-lbl"><span>DDR5-6400</span><span id="pct-ddr5">0%</span></div>
+          <div class="bt-track"><div class="bt-fill bfc" id="bar-ddr5"></div></div>
+        </div>
+        <div class="bt-row">
+          <div class="bt-lbl"><span>LPDDR5-6400</span><span id="pct-lpddr5">0%</span></div>
+          <div class="bt-track"><div class="bt-fill bfe" id="bar-lpddr5"></div></div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="runBtn" onclick="runSim()">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5L9.5 6L2.5 10.5V1.5Z" fill="currentColor"/></svg>
+          Run Simulation
+        </button>
+        <button class="btn btn-ghost" onclick="resetSim()">Reset</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 3. RESULTS ── -->
+  <div id="resultsWrap">
+    <section>
+      <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>Benchmark Output</div>
+      <h2 class="sec-h">RAM <span>Results</span></h2>
+      <p class="sec-p">Simulated values from published datasheets and industry benchmarks. Highlighted cells indicate best-in-class.</p>
+      <div class="glass">
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th data-tip="Memory module identifier">Module</th>
+                <th data-tip="Random-read latency — lower is better">Access (ns)</th>
+                <th data-tip="Active power consumption">Power (W)</th>
+                <th data-tip="Retail cost per gigabyte">$/GB</th>
+                <th data-tip="Mean Time Between Failures">MTBF (k hrs)</th>
+                <th data-tip="Peak theoretical bandwidth">Bandwidth</th>
+                <th data-tip="Supply voltage">Voltage</th>
+                <th data-tip="AI composite performance score">AI Score</th>
+              </tr>
+            </thead>
+            <tbody id="tBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── 4. ROM ── -->
+  <section class="reveal">
+    <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>ROM Module</div>
+    <h2 class="sec-h">Read-Only Memory <span>Comparison</span></h2>
+    <p class="sec-p">EEPROM versus Flash NAND across five specification dimensions relevant to non-volatile storage selection.</p>
+
+    <div class="rom-grid mb20">
+      <div class="glass gp">
+        <div class="rom-hd">
+          <div>
+            <div class="rom-name">EEPROM</div>
+            <div class="rom-desc">Electrically Erasable Programmable ROM. Byte-addressable, ultra-high endurance. Best for firmware and safety-critical configuration data.</div>
+          </div>
+          <div class="rom-icon ri-v">🟣</div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span data-tip="45 ns — lower is better">Read Speed</span><span>45 ns</span></div>
+          <div class="bar-track"><div class="bar-fill bf-v" style="width:54%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span data-tip="Byte-level, very slow write">Write Speed</span><span>5 ms/byte</span></div>
+          <div class="bar-track"><div class="bar-fill bf-v" style="width:18%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span data-tip="1,000,000 program/erase cycles">Endurance</span><span>1,000,000×</span></div>
+          <div class="bar-track"><div class="bar-fill bf-v" style="width:100%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span>Cost Efficiency</span><span>~$50 / GB</span></div>
+          <div class="bar-track"><div class="bar-fill bf-v" style="width:12%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span data-tip="Very low standby and active current">Power Usage</span><span>~2 mA active</span></div>
+          <div class="bar-track"><div class="bar-fill bf-v" style="width:94%"></div></div>
+        </div>
+      </div>
+
+      <div class="glass gp">
+        <div class="rom-hd">
+          <div>
+            <div class="rom-name">Flash Memory (NAND)</div>
+            <div class="rom-desc">Block-erasable high-density non-volatile storage. Powers SSDs, smartphones, USB drives. Dominant for cost-sensitive, high-density applications.</div>
+          </div>
+          <div class="rom-icon ri-c">⚡</div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span>Read Speed</span><span>25 ns</span></div>
+          <div class="bar-track"><div class="bar-fill bf-c" style="width:88%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span>Write Speed</span><span>200 µs/page</span></div>
+          <div class="bar-track"><div class="bar-fill bf-c" style="width:78%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span>Endurance</span><span>100,000×</span></div>
+          <div class="bar-track"><div class="bar-fill bf-c" style="width:10%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span>Cost Efficiency</span><span>~$0.08 / GB</span></div>
+          <div class="bar-track"><div class="bar-fill bf-c" style="width:98%"></div></div>
+        </div>
+        <div class="spec-bar-row">
+          <div class="spec-bar-hd"><span>Power Usage</span><span>~25 mA active</span></div>
+          <div class="bar-track"><div class="bar-fill bf-c" style="width:36%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROM full table -->
+    <div class="glass">
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Parameter</th><th>EEPROM</th><th>Flash NAND</th><th>Flash NOR</th><th>Best</th></tr></thead>
+          <tbody>
+            <tr><td>Read Latency</td><td class="cm">45 ns</td><td class="cb">25 ns</td><td class="cg">70 ns</td><td class="cb">Flash NAND</td></tr>
+            <tr><td>Write Time</td><td class="cr">5 ms/byte</td><td class="cg">200 µs/pg</td><td class="cm">10 µs/byte</td><td class="cb">Flash NAND</td></tr>
+            <tr><td>Erase Unit</td><td class="cb">Byte</td><td class="cr">Block 128 KB</td><td class="cg">Sector 4 KB</td><td class="cb">EEPROM</td></tr>
+            <tr><td>Endurance</td><td class="cb">1,000,000×</td><td class="cg">100,000×</td><td class="cg">100,000×</td><td class="cb">EEPROM</td></tr>
+            <tr><td>Data Retention</td><td class="cb">200 years</td><td class="cm">10 years</td><td class="cg">20 years</td><td class="cb">EEPROM</td></tr>
+            <tr><td>Max Density</td><td class="cr">MB range</td><td class="cb">TB range</td><td class="cm">MB range</td><td class="cb">Flash NAND</td></tr>
+            <tr><td>Cost / GB</td><td class="cr">~$50</td><td class="cb">~$0.08</td><td class="cm">~$1.50</td><td class="cb">Flash NAND</td></tr>
+            <tr><td>Active Power</td><td class="cb">~2 mA</td><td class="cr">~25 mA</td><td class="cg">~15 mA</td><td class="cb">EEPROM</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 5. DATA VISUALISATION ── -->
+  <section class="reveal">
+    <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>Data Visualisation</div>
+    <h2 class="sec-h">Analytics <span>Dashboard</span></h2>
+    <p class="sec-p">Seven Chart.js visualisations with matching periwinkle-blue aesthetics. All charts live-rendered from simulation data.</p>
+
+    <div class="chart-grid-2 mb12">
+      <div class="glass chart-wrap">
+        <div class="chart-title">Access Time (ns) — Lower is Better</div>
+        <canvas id="c-access"></canvas>
+      </div>
+      <div class="glass chart-wrap">
+        <div class="chart-title">Power Consumption (W)</div>
+        <canvas id="c-power"></canvas>
+      </div>
+    </div>
+
+    <div class="glass chart-wrap mb12">
+      <div class="chart-title">Cost per GB — All Memory Types (Log Scale)</div>
+      <canvas id="c-cost" style="max-height:230px"></canvas>
+    </div>
+
+    <div class="chart-grid-2 mb12">
+      <div class="glass chart-wrap">
+        <div class="chart-title">Cost Distribution (Pie)</div>
+        <canvas id="c-pie"></canvas>
+      </div>
+      <div class="glass chart-wrap">
+        <div class="chart-title">Bandwidth GB/s (Line)</div>
+        <canvas id="c-bw"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-grid-2">
+      <div class="glass chart-wrap">
+        <div class="chart-title">Reliability MTBF (×1000 hrs)</div>
+        <canvas id="c-mtbf"></canvas>
+      </div>
+      <div class="glass chart-wrap">
+        <div class="chart-title">Overall Performance Radar</div>
+        <canvas id="c-radar"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 6. TEMPERATURE ── -->
+  <section class="reveal">
+    <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>Thermal Simulation</div>
+    <h2 class="sec-h">Temperature <span>Impact Lab</span></h2>
+    <p class="sec-p">Drag the slider to simulate operating temperature. Performance degrades non-linearly beyond nominal range.</p>
+
+    <div class="glass gp-lg mb12">
+      <div class="temp-top">
+        <div>
+          <div style="font-family:var(--mono);font-size:0.65rem;letter-spacing:0.09em;text-transform:uppercase;color:var(--t3);margin-bottom:8px" data-tip="Simulated ambient temperature in °C">Ambient Temperature</div>
+        </div>
+        <div class="temp-big" id="tDisp">25<span class="temp-unit">°C</span></div>
+      </div>
+      <input type="range" id="tSlider" min="0" max="100" value="25" oninput="onTemp(+this.value)"/>
+      <div class="temp-ticks">
+        <span>0°C</span><span>25°C Nominal</span><span>70°C Elevated</span><span>100°C Critical</span>
+      </div>
+      <div class="temp-alert" id="tAlert"></div>
+
+      <div class="perf-live">
+        <div class="plv-card">
+          <div class="plv-name">DDR4-3200</div>
+          <div class="plv-pct" id="pp-ddr4" style="color:var(--accent-light)">100%</div>
+          <div class="plv-track"><div class="plv-fill" id="pb-ddr4" style="background:var(--accent);width:100%"></div></div>
+        </div>
+        <div class="plv-card">
+          <div class="plv-name">DDR5-6400</div>
+          <div class="plv-pct" id="pp-ddr5" style="color:var(--cyan)">100%</div>
+          <div class="plv-track"><div class="plv-fill" id="pb-ddr5" style="background:var(--cyan);width:100%"></div></div>
+        </div>
+        <div class="plv-card">
+          <div class="plv-name">LPDDR5-6400</div>
+          <div class="plv-pct" id="pp-lpddr5" style="color:var(--emerald)">100%</div>
+          <div class="plv-track"><div class="plv-fill" id="pb-lpddr5" style="background:var(--emerald);width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass chart-wrap">
+      <div class="chart-title">Performance Degradation Curve (0°C → 100°C)</div>
+      <canvas id="c-temp" style="max-height:310px"></canvas>
+    </div>
+  </section>
+
+  <!-- ── 7. AI INSIGHTS ── -->
+  <section class="reveal">
+    <div class="sec-eyebrow"><span class="sec-eyebrow-dot"></span>AI Analysis</div>
+    <h2 class="sec-h">Smart <span>Insights</span></h2>
+    <p class="sec-p">Automatically generated conclusions based on benchmarked performance data across all tested memory technologies.</p>
+
+    <div class="insight-grid stagger mb28">
+      <div class="glass ins gp">
+        <div class="ins-icon">🚀</div>
+        <div class="ins-cat">Best Performance</div>
+        <div class="ins-name">DDR5-6400</div>
+        <div class="ins-text">DDR5 delivers highest performance at 102.4 GB/s bandwidth and 12 ns access latency. Ideal for HPC, gaming, and AI workloads.</div>
+      </div>
+      <div class="glass ins i-emerald gp">
+        <div class="ins-icon">🌿</div>
+        <div class="ins-cat">Most Power Efficient</div>
+        <div class="ins-name">LPDDR5-6400</div>
+        <div class="ins-text">LPDDR5 is most power efficient at just 3.5 W on a 1.05 V supply. Purpose-built for mobile and edge computing platforms.</div>
+      </div>
+      <div class="glass ins i-amber gp">
+        <div class="ins-icon">💰</div>
+        <div class="ins-cat">Best Cost Value</div>
+        <div class="ins-name">DDR4-3200</div>
+        <div class="ins-text">DDR4 offers best cost efficiency at $3.50/GB — mature manufacturing and wide availability keep prices low.</div>
+      </div>
+      <div class="glass ins i-cyan gp">
+        <div class="ins-icon">🛡️</div>
+        <div class="ins-cat">Most Reliable</div>
+        <div class="ins-name">DDR4-3200</div>
+        <div class="ins-text">Highest MTBF at 50,000 hours with 8+ years of field validation. First choice for mission-critical server deployments.</div>
+      </div>
+      <div class="glass ins gp">
+        <div class="ins-icon">📦</div>
+        <div class="ins-cat">ROM — Endurance</div>
+        <div class="ins-name">EEPROM</div>
+        <div class="ins-text">1 million write cycles and 200-year data retention. The only choice for firmware, BIOS, and safety-critical non-volatile storage.</div>
+      </div>
+      <div class="glass ins i-emerald gp">
+        <div class="ins-icon">💾</div>
+        <div class="ins-cat">ROM — Density &amp; Cost</div>
+        <div class="ins-name">Flash NAND</div>
+        <div class="ins-text">$0.08/GB at terabyte-scale density. Flash NAND underpins every consumer storage device — SSDs, phones, and USB drives.</div>
+      </div>
+    </div>
+
+    <!-- Report section -->
+    <div class="flex-between mb12">
+      <h3 style="font-size:1rem;font-weight:500;color:var(--t1);letter-spacing:-0.02em">Auto-Generated Report</h3>
+      <button class="btn btn-export" onclick="exportPDF()">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Export PDF
+      </button>
+    </div>
+    <div id="reportArea">Run the simulation (above) to generate a full data-driven lab report here.</div>
+  </section>
+
+</div><!-- /page -->
+
+
+<!-- ════════════════════════ JS ════════════════════════ -->
+<script>
+/* ────────────────────────────────────────────────────────
+   NEURAL NETWORK — glacier-slow, ethereal
+──────────────────────────────────────────────────────── */
+(function () {
+  const cv  = document.getElementById('neural');
+  const ctx = cv.getContext('2d');
+  let W, H, nodes = [];
+  const N = 32, MAX_D = 190;
+
+  function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+
+  function makeNode() {
+    return {
+      x:  Math.random() * W,
+      y:  Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.14,
+      vy: (Math.random() - 0.5) * 0.14,
+      r:  Math.random() * 1.5 + 0.7,
+    };
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const d  = Math.hypot(dx, dy);
+        if (d < MAX_D) {
+          const a = (1 - d / MAX_D) * 0.1;
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.strokeStyle = `rgba(129,140,248,${a})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+
+    nodes.forEach(n => {
+      /* Soft glow */
+      const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 5);
+      g.addColorStop(0, 'rgba(129,140,248,0.22)');
+      g.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r * 5, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      /* Core */
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(165,180,252,0.45)';
+      ctx.fill();
+
+      n.x += n.vx; n.y += n.vy;
+      if (n.x < 0 || n.x > W) n.vx *= -1;
+      if (n.y < 0 || n.y > H) n.vy *= -1;
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('mousemove', e => {
+    const cx = W / 2, cy = H / 2;
+    nodes.forEach(n => {
+      n.vx += (e.clientX - cx) / cx * 0.002;
+      n.vy += (e.clientY - cy) / cy * 0.002;
+      const sp = Math.hypot(n.vx, n.vy);
+      if (sp > 0.5) { n.vx *= 0.94; n.vy *= 0.94; }
+    });
+  });
+
+  resize();
+  nodes = Array.from({ length: N }, makeNode);
+  draw();
+})();
+
+/* ────────────────────────────────────────────────────────
+   SCROLL REVEAL — IntersectionObserver
+──────────────────────────────────────────────────────── */
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+}, { threshold: 0.08 });
+document.querySelectorAll('.reveal, .stagger').forEach(el => io.observe(el));
+
+/* ────────────────────────────────────────────────────────
+   DATA
+──────────────────────────────────────────────────────── */
+const RAM = {
+  ddr4:   { label: 'DDR4-3200',   access: 14.0, power: 4.5, cost: 3.50, mtbf: 50000, bw: 51.2,  volt: 1.2,  maxT: 85, color: '#818cf8' },
+  ddr5:   { label: 'DDR5-6400',   access: 12.0, power: 7.0, cost: 6.00, mtbf: 45000, bw: 102.4, volt: 1.1,  maxT: 95, color: '#67e8f9' },
+  lpddr5: { label: 'LPDDR5-6400', access: 13.0, power: 3.5, cost: 5.50, mtbf: 40000, bw: 51.2,  volt: 1.05, maxT: 85, color: '#6ee7b7' },
+};
+
+/* ────────────────────────────────────────────────────────
+   STATE
+──────────────────────────────────────────────────────── */
+let sel = { ddr4: true, ddr5: true, lpddr5: true };
+let C   = {};
+
+/* ────────────────────────────────────────────────────────
+   CHIP TOGGLE
+──────────────────────────────────────────────────────── */
+function toggleChip(k, el) {
+  sel[k] = !sel[k];
+  el.classList.toggle('on', sel[k]);
+}
+
+/* ────────────────────────────────────────────────────────
+   LOADER
+──────────────────────────────────────────────────────── */
+function showLoader(msg) {
+  document.getElementById('ldMsg').textContent  = msg;
+  document.getElementById('ldFill').style.width = '0%';
+  document.getElementById('loader').classList.add('on');
+}
+function setProgress(pct, msg) {
+  document.getElementById('ldFill').style.width = pct + '%';
+  if (msg) document.getElementById('ldMsg').textContent = msg;
+}
+function hideLoader() { document.getElementById('loader').classList.remove('on'); }
+
+/* ────────────────────────────────────────────────────────
+   SIMULATION
+──────────────────────────────────────────────────────── */
+function runSim() {
+  const active = Object.keys(sel).filter(k => sel[k]);
+  if (!active.length) { alert('Select at least one module.'); return; }
+
+  const runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+
+  document.getElementById('benchTracks').style.display = 'flex';
+  showLoader('Allocating virtual memory pages…');
+
+  const phases = [
+    'Sequential write sweep…',
+    'Random-access latency pass…',
+    'Power draw profiling…',
+    'Thermal stress test…',
+    'Computing AI score matrix…',
+  ];
+
+  let prog = { ddr4: 0, ddr5: 0, lpddr5: 0 };
+  const iv = setInterval(() => {
+    let done = 0;
+    active.forEach(k => {
+      const inc = (k === 'ddr5' ? 2.7 : k === 'lpddr5' ? 2.2 : 1.8) * (0.7 + Math.random() * 0.6);
+      prog[k] = Math.min(100, prog[k] + inc);
+      const b = document.getElementById('bar-' + k);
+      const p = document.getElementById('pct-' + k);
+      if (b) b.style.width = prog[k] + '%';
+      if (p) p.textContent = Math.round(prog[k]) + '%';
+      if (prog[k] >= 100) done++;
+    });
+
+    const ov = active.reduce((s, k) => s + prog[k], 0) / (active.length * 100);
+    setProgress(ov * 100, phases[Math.min(4, Math.floor(ov * 5))]);
+
+    if (done === active.length) {
+      clearInterval(iv);
+      setTimeout(() => {
+        hideLoader();
+        finalise(active);
+        runBtn.disabled = false;
+        runBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5L9.5 6L2.5 10.5V1.5Z" fill="currentColor"/></svg>Re-run`;
+        playClick();
+      }, 350);
+    }
+  }, 50);
+}
+
+function finalise(active) {
+  /* KPIs */
+  const bA = RAM[active.reduce((b, k) => RAM[k].access < RAM[b].access ? k : b)];
+  const bP = RAM[active.reduce((b, k) => RAM[k].power  < RAM[b].power  ? k : b)];
+  const bC = RAM[active.reduce((b, k) => RAM[k].cost   < RAM[b].cost   ? k : b)];
+  const bM = RAM[active.reduce((b, k) => RAM[k].mtbf   > RAM[b].mtbf   ? k : b)];
+  document.getElementById('kpi-a').textContent = bA.access;
+  document.getElementById('kpi-p').textContent = bP.power;
+  document.getElementById('kpi-c').textContent = '$' + bC.cost.toFixed(2);
+  document.getElementById('kpi-m').textContent = (bM.mtbf / 1000).toFixed(0) + 'k';
+
+  /* Table */
+  const bestA = Math.min(...active.map(k => RAM[k].access));
+  const bestP = Math.min(...active.map(k => RAM[k].power));
+  const bestC = Math.min(...active.map(k => RAM[k].cost));
+  const bestM = Math.max(...active.map(k => RAM[k].mtbf));
+
+  const tbody = document.getElementById('tBody');
+  tbody.innerHTML = '';
+  active.forEach(k => {
+    const d = RAM[k];
+    const score = Math.round(
+      (bestA/d.access)*25 + (bestP/d.power)*20 +
+      (bestC/d.cost)*15   + (d.mtbf/bestM)*20 + (d.bw/102.4)*20
+    );
+    const ca = d.access===bestA?'cb':'';
+    const cp = d.power ===bestP?'cb':'';
+    const cc = d.cost  ===bestC?'cb':'';
+    const cm = d.mtbf  ===bestM?'cb':'';
+    tbody.innerHTML += `<tr>
+      <td><span class="ctag" style="background:${d.color}18;color:${d.color};border:1px solid ${d.color}28">${d.label}</span></td>
+      <td class="${ca}">${d.access}</td>
+      <td class="${cp}">${d.power}</td>
+      <td class="${cc}">$${d.cost.toFixed(2)}</td>
+      <td class="${cm}">${(d.mtbf/1000).toFixed(0)}k</td>
+      <td>${d.bw} GB/s</td>
+      <td>${d.volt} V</td>
+      <td><span style="color:${d.color};font-weight:500">${score}/100</span></td>
+    </tr>`;
+  });
+
+  document.getElementById('resultsWrap').classList.add('show');
+  buildReport();
+}
+
+function resetSim() {
+  document.getElementById('resultsWrap').classList.remove('show');
+  document.getElementById('benchTracks').style.display = 'none';
+  ['ddr4','ddr5','lpddr5'].forEach(k => {
+    const b=document.getElementById('bar-'+k), p=document.getElementById('pct-'+k);
+    if(b) b.style.width='0%'; if(p) p.textContent='0%';
+  });
+  const rb=document.getElementById('runBtn');
+  rb.innerHTML=`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5L9.5 6L2.5 10.5V1.5Z" fill="currentColor"/></svg>Run Simulation`;
+  ['kpi-a','kpi-p','kpi-c','kpi-m'].forEach(id => document.getElementById(id).textContent='—');
+}
+
+/* ────────────────────────────────────────────────────────
+   CHARTS
+──────────────────────────────────────────────────────── */
+const chartDefaults = {
+  responsive: true,
+  animation: { duration: 750, easing: 'easeOutQuart' },
+  plugins: {
+    legend: {
+      labels: {
+        color: 'rgba(255,255,255,0.32)',
+        font: { family: "'IBM Plex Mono'", size: 10 },
+        boxWidth: 10, boxHeight: 10, padding: 16,
+      }
+    },
+    tooltip: {
+      backgroundColor: 'rgba(14,14,18,0.95)',
+      borderColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      titleColor: 'rgba(255,255,255,0.8)',
+      bodyColor: 'rgba(255,255,255,0.5)',
+      padding: 11,
+      cornerRadius: 10,
+      titleFont: { family: "'Sora'", weight: '500', size: 12 },
+      bodyFont: { family: "'IBM Plex Mono'", size: 11 },
+    }
+  },
+  scales: {
+    x: {
+      ticks: { color: 'rgba(255,255,255,0.24)', font: { family: "'IBM Plex Mono'", size: 9 } },
+      grid:  { color: 'rgba(255,255,255,0.025)' },
+      border:{ color: 'rgba(255,255,255,0.04)' },
+    },
+    y: {
+      ticks: { color: 'rgba(255,255,255,0.24)', font: { family: "'IBM Plex Mono'", size: 9 } },
+      grid:  { color: 'rgba(255,255,255,0.03)' },
+      border:{ color: 'rgba(255,255,255,0.04)' },
+    }
+  }
+};
+
+function initCharts() {
+  const all    = ['ddr4','ddr5','lpddr5'];
+  const labels = all.map(k => RAM[k].label);
+  const colors = all.map(k => RAM[k].color);
+  const allLbl = [...labels,'EEPROM','Flash NAND'];
+  const allClr = [...colors,'#a78bfa','#67e8f9'];
+  const allCst = [...all.map(k=>RAM[k].cost), 50, 0.08];
+
+  const bar = (id, data, yLbl) => new Chart(id, {
+    type: 'bar',
+    data: { labels: data.labels, datasets: [{ label: yLbl, data: data.vals, backgroundColor: data.colors.map(c=>c+'22'), borderColor: data.colors, borderWidth: 1.5, borderRadius: 7, borderSkipped: false }] },
+    options: chartDefaults,
+  });
+
+  C.access = bar('c-access', { labels, vals: all.map(k=>RAM[k].access), colors }, 'Access (ns)');
+  C.power  = bar('c-power',  { labels, vals: all.map(k=>RAM[k].power),  colors }, 'Power (W)');
+
+  /* Cost log scale */
+  C.cost = new Chart('c-cost', {
+    type: 'bar',
+    data: { labels: allLbl, datasets: [{ label: 'Cost/GB ($)', data: allCst, backgroundColor: allClr.map(c=>c+'22'), borderColor: allClr, borderWidth: 1.5, borderRadius: 7, borderSkipped: false }] },
+    options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, type: 'logarithmic' } } },
+  });
+
+  /* Pie */
+  C.pie = new Chart('c-pie', {
+    type: 'pie',
+    data: { labels: allLbl, datasets: [{ data: allCst, backgroundColor: allClr.map(c=>c+'40'), borderColor: allClr, borderWidth: 1.5, hoverOffset: 8 }] },
+    options: {
+      responsive: true,
+      animation: { duration: 750 },
+      plugins: { legend: chartDefaults.plugins.legend, tooltip: chartDefaults.plugins.tooltip },
+    },
+  });
+
+  /* BW line */
+  C.bw = new Chart('c-bw', {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Bandwidth (GB/s)', data: all.map(k=>RAM[k].bw), borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.07)', fill: true, tension: 0.42, borderWidth: 1.8, pointBackgroundColor: colors, pointRadius: 5, pointHoverRadius: 7 }] },
+    options: chartDefaults,
+  });
+
+  /* MTBF */
+  C.mtbf = bar('c-mtbf', { labels, vals: all.map(k=>RAM[k].mtbf/1000), colors }, 'MTBF (×1000 hrs)');
+
+  /* Radar */
+  C.radar = new Chart('c-radar', {
+    type: 'radar',
+    data: {
+      labels: ['Access','Power Eff.','Cost Eff.','Reliability','Bandwidth','Thermals'],
+      datasets: all.map(k => {
+        const d = RAM[k];
+        return {
+          label: d.label,
+          data: [(14/d.access)*100,(3.5/d.power)*100,(3.5/d.cost)*100,(d.mtbf/50000)*100,(d.bw/102.4)*100,(d.maxT/95)*100],
+          backgroundColor: d.color+'14', borderColor: d.color,
+          borderWidth: 1.5, pointBackgroundColor: d.color, pointRadius: 3,
+        };
+      })
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 750 },
+      plugins: { legend: chartDefaults.plugins.legend, tooltip: chartDefaults.plugins.tooltip },
+      scales: { r: {
+        min: 0, max: 100,
+        ticks: { color: 'rgba(255,255,255,0.18)', backdropColor: 'transparent', font: { family:"'IBM Plex Mono'", size:9 } },
+        grid: { color: 'rgba(255,255,255,0.045)' },
+        pointLabels: { color: 'rgba(255,255,255,0.38)', font: { family:"'IBM Plex Mono'", size:10 } },
+        angleLines: { color: 'rgba(255,255,255,0.045)' },
+      } }
+    },
+  });
+
+  /* Temp chart */
+  initTempChart();
+}
+
+/* ────────────────────────────────────────────────────────
+   TEMPERATURE
+──────────────────────────────────────────────────────── */
+function tPerf(type, t) {
+  const peak = type === 'lpddr5' ? 25 : 20;
+  const maxT = RAM[type].maxT;
+  if (t <= peak) return Math.max(0, 100 - ((peak - t) / peak) * 8);
+  if (t > maxT) return 0;
+  return Math.max(0, 100 - Math.pow((t - peak) / (maxT - peak), 1.6) * 100);
+}
+
+function onTemp(t) {
+  const disp  = document.getElementById('tDisp');
+  const alert = document.getElementById('tAlert');
+  disp.innerHTML = t + '<span class="temp-unit">°C</span>';
+
+  if (t > 85) {
+    disp.style.color = '#fda4af';
+    alert.style.display = 'block';
+    Object.assign(alert.style, { background: 'rgba(253,164,175,0.06)', border:'1px solid rgba(253,164,175,0.16)', color:'#fda4af', borderRadius:'12px' });
+    alert.textContent = '⚠  Critical — thermal throttling active. Data integrity risk above 95°C. Immediate cooling required.';
+  } else if (t > 70) {
+    disp.style.color = '#fcd34d';
+    alert.style.display = 'block';
+    Object.assign(alert.style, { background: 'rgba(252,211,77,0.06)', border:'1px solid rgba(252,211,77,0.16)', color:'#fcd34d', borderRadius:'12px' });
+    alert.textContent = '⚡  Elevated — performance degradation beginning. Active cooling recommended above 70°C.';
+  } else if (t < 10) {
+    disp.style.color = '#67e8f9';
+    alert.style.display = 'block';
+    Object.assign(alert.style, { background: 'rgba(103,232,249,0.06)', border:'1px solid rgba(103,232,249,0.16)', color:'#67e8f9', borderRadius:'12px' });
+    alert.textContent = '❄  Cold start — below 10°C introduces voltage regulator instability (~8% efficiency loss).';
+  } else {
+    disp.style.color = '';
+    alert.style.display = 'none';
+  }
+
+  ['ddr4','ddr5','lpddr5'].forEach(k => {
+    const p = Math.round(tPerf(k, t));
+    document.getElementById('pp-'+k).textContent = p + '%';
+    document.getElementById('pb-'+k).style.width = p + '%';
+  });
+
+  if (C.tempChart) updateTMarker(t);
+}
+
+function initTempChart() {
+  if (C.tempChart) { C.tempChart.destroy(); }
+  const lbs = Array.from({length:21}, (_,i) => i*5+'°C');
+  const buildLine = k => Array.from({length:21}, (_,i) => tPerf(k, i*5));
+
+  C.tempChart = new Chart('c-temp', {
+    type: 'line',
+    data: {
+      labels: lbs,
+      datasets: [
+        { label:'DDR4',   data:buildLine('ddr4'),   borderColor:'#818cf8',backgroundColor:'rgba(129,140,248,0.06)',fill:true,  tension:0.42,borderWidth:1.8,pointRadius:2.5,pointBackgroundColor:'#818cf8' },
+        { label:'DDR5',   data:buildLine('ddr5'),   borderColor:'#67e8f9',backgroundColor:'rgba(103,232,249,0.04)',fill:false, tension:0.42,borderWidth:1.8,pointRadius:2.5,pointBackgroundColor:'#67e8f9' },
+        { label:'LPDDR5', data:buildLine('lpddr5'), borderColor:'#6ee7b7',backgroundColor:'rgba(110,231,183,0.04)',fill:false, tension:0.42,borderWidth:1.8,pointRadius:2.5,pointBackgroundColor:'#6ee7b7' },
+      ]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 500 },
+      plugins: { legend: chartDefaults.plugins.legend, tooltip: chartDefaults.plugins.tooltip },
+      scales: {
+        x: chartDefaults.scales.x,
+        y: { ...chartDefaults.scales.y, min:0, max:108, title:{ display:true, text:'Performance (%)', color:'rgba(255,255,255,0.24)', font:{ family:"'IBM Plex Mono'", size:9 } } },
+      }
+    }
+  });
+}
+
+function updateTMarker(t) {
+  const lbs = C.tempChart.data.labels;
+  const near = Math.round(t/5)*5;
+  const idx  = lbs.indexOf(near+'°C');
+  C.tempChart.data.datasets[3] = {
+    label:'Now', data: lbs.map((_,i)=>i===idx?108:null),
+    borderColor:'rgba(255,255,255,0.14)', borderDash:[4,4], borderWidth:1,
+    pointRadius:0, fill:false, spanGaps:false, tension:0,
+  };
+  C.tempChart.update('none');
+}
+
+/* ────────────────────────────────────────────────────────
+   REPORT
+──────────────────────────────────────────────────────── */
+function buildReport() {
+  const ts = new Date().toLocaleString();
+  document.getElementById('reportArea').textContent =
+`AI VIRTUAL LAB — MEMORY TECHNOLOGY ANALYSIS REPORT
+Assignment 10 | ${ts}
+──────────────────────────────────────────────
+
+SECTION 1 — OVERVIEW
+Comparative benchmark of DDR4-3200, DDR5-6400, LPDDR5-6400 DRAM and
+EEPROM / Flash NAND ROM technologies across six performance dimensions:
+access latency, power, cost/GB, reliability (MTBF), bandwidth, thermals.
+
+SECTION 2 — RAM BENCHMARK
+┌──────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ Module       │ Access   │ Power    │ $/GB     │ MTBF     │ BW       │
+├──────────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
+│ DDR4-3200    │ 14 ns    │  4.5 W   │  $3.50 ★ │  50k ★   │ 51.2GB/s │
+│ DDR5-6400    │ 12 ns ★  │  7.0 W   │  $6.00   │  45k     │ 102.4 ★  │
+│ LPDDR5-6400  │ 13 ns    │  3.5 W ★ │  $5.50   │  40k     │ 51.2GB/s │
+└──────────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+
+SECTION 3 — ROM COMPARISON
+┌──────────────┬───────────┬──────────────┬───────────┬──────────┐
+│ ROM Type     │ Read      │ Endurance    │ $/GB      │ Power    │
+├──────────────┼───────────┼──────────────┼───────────┼──────────┤
+│ EEPROM       │ 45 ns     │ 1,000,000× ★ │ ~$50      │ 2 mA ★   │
+│ Flash NAND   │ 25 ns ★   │   100,000×   │ $0.08 ★   │ 25 mA    │
+└──────────────┴───────────┴──────────────┴───────────┴──────────┘
+
+SECTION 4 — THERMAL FINDINGS
+All types at 100% performance at 25°C nominal.
+  DDR4:   Throttles at 85°C. Gradual curve from 20°C.
+  DDR5:   Better ceiling (95°C). 5% cold-start penalty.
+  LPDDR5: Best mobile thermal profile. Throttles at 85°C.
+Below 10°C: ~8% efficiency loss across all types.
+
+SECTION 5 — CONCLUSIONS
+  Best Performance     → DDR5-6400  (102.4 GB/s, 12 ns latency)
+  Best Power Efficiency → LPDDR5-6400 (3.5 W @ 1.05 V)
+  Best Cost Efficiency  → DDR4-3200  ($3.50/GB)
+  Best Reliability      → DDR4-3200  (50,000 hr MTBF)
+  ROM Endurance         → EEPROM     (1M cycles, 200yr retention)
+  ROM Density/Cost      → Flash NAND ($0.08/GB, TB-scale)
+
+──────────────────────────────────────────────
+Virtual Lab Simulation Engine v4.0`.trim();
+}
+
+/* ────────────────────────────────────────────────────────
+   PDF EXPORT
+──────────────────────────────────────────────────────── */
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc  = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const text = document.getElementById('reportArea').textContent;
+  doc.setFont('courier','normal');
+  doc.setFontSize(8);
+  doc.setTextColor(25,25,30);
+  const lines = doc.splitTextToSize(text, 184);
+  let y = 15;
+  lines.forEach(l => { if(y>282){doc.addPage();y=15;} doc.text(l,13,y); y+=4.3; });
+  doc.save('Memory_Lab_Report.pdf');
+  playClick();
+}
+
+/* ────────────────────────────────────────────────────────
+   SOUND
+──────────────────────────────────────────────────────── */
+function playClick() {
+  try {
+    const ac = new(window.AudioContext||window.webkitAudioContext)();
+    const o  = ac.createOscillator(), g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(1040, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(480, ac.currentTime+0.1);
+    g.gain.setValueAtTime(0.07, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.22);
+    o.start(ac.currentTime); o.stop(ac.currentTime+0.22);
+  } catch(e) {}
+}
+
+/* ────────────────────────────────────────────────────────
+   INIT
+──────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  onTemp(25);
+  initCharts();
+});
+</script>
+</body>
+</html>
